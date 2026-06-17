@@ -61,7 +61,6 @@ function Keybind.GetAction(context, name)
 			binding:GetPropertyChangedSignal("KeyCode"):Connect(function()
 				if binding.KeyCode == Enum.KeyCode.Unknown then return end
 				
-				-- cannot bind non-gamepad keycodes into gamepad binding
 				local isGamepadBinding = (binding.KeyCode.Name:find("Button") ~= nil or
 					binding.KeyCode.Name:find("DPad") ~= nil) and binding.KeyCode.Name:find("Mouse") == nil
 				
@@ -71,10 +70,8 @@ function Keybind.GetAction(context, name)
 					return
 				end
 				
-				
-				-- loop to check for duplicates
 				for otherName, v in context.keybinds do
-					if v == action then continue end -- don't check itself
+					if v == action then continue end
 					
 					if v[bindingName].KeyCode == binding.KeyCode then
 						warn(`Conflicting keybinds found for {name} and {otherName}.`)
