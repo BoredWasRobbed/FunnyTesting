@@ -6,6 +6,7 @@ local UI = Assets:WaitForChild("UI")
 
 local GlobalModules = ReplicatedStorage:WaitForChild("GlobalModules")
 local CharacterRegistry = require(GlobalModules:WaitForChild("CharacterRegistry"))
+local Keybind = require(GlobalModules:WaitForChild("Keybind"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local SwitchEvent = Remotes:WaitForChild("SwitchCharacter")
@@ -24,6 +25,13 @@ local function insertHotbarItem(player: Player, item: {}, layoutOrder: number)
 		newMove.Tooltip.Text = item.Tooltip or ""
 		newMove.LayoutOrder = layoutOrder or tonumber(item.Bind)
 		newMove.Parent = player:WaitForChild("PlayerGui"):WaitForChild("HUD").MovesetContainer.Hotbar
+		
+		local bind = Keybind.GetAction("Idle", item.MoveName)
+		bind.KeyboardBinding = Enum.KeyCode[item.Bind]
+		
+		bind.Pressed:Connect(function()
+			print(item.MoveName)
+		end)
 	end
 end
 
