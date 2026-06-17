@@ -5,7 +5,7 @@ local Assets = ReplicatedStorage:WaitForChild("Assets")
 local UI = Assets:WaitForChild("UI")
 
 local GlobalModules = ReplicatedStorage:WaitForChild("GlobalModules")
-local CharacterService = require(GlobalModules:WaitForChild("CharacterService"))
+local CharacterRegistry = require(GlobalModules:WaitForChild("CharacterRegistry"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local SwitchEvent = Remotes:WaitForChild("SwitchCharacter")
@@ -30,7 +30,7 @@ end
 function UIHandler.constructCharacterList()
 	local characterList = {}
 
-	for characterName, _ in pairs(CharacterService:getCharacters()) do
+	for characterName, _ in pairs(CharacterRegistry:getCharacters()) do
 		local newIcon = Icon.new()
 		newIcon:setLabel(characterName)
 		newIcon:bindEvent("toggled", function()
@@ -48,9 +48,15 @@ end
 
 
 function UIHandler.constructMoveset(player, characterMoveset)
-	for _, v in pairs(characterMoveset) do
-		if v.Type == "BaseMove" then
-			insertHotbarItem(player, v)
+	for i, v in pairs(player:WaitForChild("PlayerGui"):WaitForChild("HUD").MovesetContainer.Hotbar:GetChildren()) do
+		if v:FindFirstChild("MoveName") then
+			v:Destroy()
+		end
+	end
+	
+	for _, item in pairs(characterMoveset) do
+		if item.Type == "BaseMove" then
+			insertHotbarItem(player, item)
 		end
 	end
 end
