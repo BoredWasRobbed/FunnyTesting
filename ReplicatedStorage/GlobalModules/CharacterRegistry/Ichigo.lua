@@ -9,13 +9,13 @@ Ichigo.Moveset = {
 	},
 	["GetsugaTensho"] = {
 		Type = "BaseMove",
-		Name = "Getsuga Tensho",
+		Name = "GetsugaTensho",
 		Bind = "1",
 		Tooltip = "HOLD"
 	},
 	["VanishingJab"] = {
 		Type = "BaseMove",
-		Name = "Vanishing Jab",
+		Name = "VanishingJab",
 		Bind = "2"
 	},
 	["Krash"] = {
