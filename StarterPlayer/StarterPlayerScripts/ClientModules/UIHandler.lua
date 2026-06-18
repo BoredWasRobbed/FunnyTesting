@@ -27,6 +27,14 @@ local KeyCodeByBind = {
 
 local UIHandler = {}
 
+local function getMoveByType(moveset, moveType)
+	for _, item in pairs(moveset) do
+		if item.Type == moveType then
+			return item
+		end
+	end
+end
+
 local function insertHotbarItem(player: Player, item: {}, layoutOrder: number)
 	if not item then return end
 	
@@ -44,6 +52,28 @@ local function insertHotbarItem(player: Player, item: {}, layoutOrder: number)
 		bind.Pressed:Connect(function()
 			print(item.Name)
 		end)
+	end
+end
+
+local function applyGradient(fillFrame: Frame, gradientData)
+	if not fillFrame or not gradientData then return end
+
+	local gradient = fillFrame:FindFirstChildOfClass("UIGradient")
+	if not gradient then
+		gradient = Instance.new("UIGradient")
+		gradient.Parent = fillFrame
+	end
+
+	if gradientData.Color then
+		gradient.Color = gradientData.Color
+	end
+
+	if gradientData.Transparency then
+		gradient.Transparency = gradientData.Transparency
+	end
+
+	if gradientData.Rotation then
+		gradient.Rotation = gradientData.Rotation
 	end
 end
 
@@ -68,17 +98,42 @@ end
 
 
 function UIHandler.constructMoveset(player, characterMoveset)
-	for i, v in pairs(player:WaitForChild("PlayerGui"):WaitForChild("HUD").MovesetContainer.Hotbar:GetChildren()) do
+	local playerGui = player:WaitForChild("PlayerGui")
+	local MovesetContainer = playerGui:WaitForChild("HUD").MovesetContainer
+
+	local awakeningMove = getMoveByType(characterMoveset, "Awakening")
+	if awakeningMove then
+		MovesetContainer.AwakeningBar.AwakeningName.Text = awakeningMove.Name
+		MovesetContainer.AwakeningBar.BindDisplay.Text = "Press ".. awakeningMove.Bind.." to Awaken"
+	end
+
+	for _, v in pairs(MovesetContainer.Hotbar:GetChildren()) do
 		if v:FindFirstChild("MoveName") then
 			v:Destroy()
 		end
 	end
-	
+
 	for _, item in pairs(characterMoveset) do
 		if item.Type == "BaseMove" then
 			insertHotbarItem(player, item)
 		end
 	end
+end
+
+function UIHandler.applyCharacterBars(player: Player, characterName: string)
+	local character = CharacterRegistry:getCharacter(characterName)
+	if not character or not character.UI or not character.UI.BarGradients then
+		return
+	end
+
+	local playerGui = player:WaitForChild("PlayerGui")
+	local MovesetContainer = playerGui:WaitForChild("HUD").MovesetContainer
+
+	local awakeningFill = MovesetContainer.AwakeningBar.Fill
+	local specialFill = MovesetContainer.Hotbar.SpecialBar.Fill
+
+	applyGradient(awakeningFill, character.UI.BarGradients.Awakening)
+	applyGradient(specialFill, character.UI.BarGradients.Special)
 end
 
 return UIHandler
