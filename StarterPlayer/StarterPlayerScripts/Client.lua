@@ -15,5 +15,6 @@ local player = game.Players.LocalPlayer
 UIHandler.constructCharacterList()
 
 SwitchEvent.OnClientEvent:Connect(function(characterData)
+	UIHandler.applyCharacterBars(player, characterData.Name)
 	UIHandler.constructMoveset(player, characterData.Moveset)
 end)
