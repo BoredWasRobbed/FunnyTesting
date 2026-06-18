@@ -53,8 +53,4 @@ Ichigo.UI = {
 	}
 }
 
-function Ichigo.getMoveset()
-	return Ichigo.Moveset
-end
-
 return Ichigo
