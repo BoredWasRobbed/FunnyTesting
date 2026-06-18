@@ -13,6 +13,18 @@ local SwitchEvent = Remotes:WaitForChild("SwitchCharacter")
 
 local Icon = require(ReplicatedStorage:WaitForChild("Icon"))
 
+local KeyCodeByBind = {
+	["1"] = Enum.KeyCode.One,
+	["2"] = Enum.KeyCode.Two,
+	["3"] = Enum.KeyCode.Three,
+	["4"] = Enum.KeyCode.Four,
+	["5"] = Enum.KeyCode.Five,
+	["6"] = Enum.KeyCode.Six,
+	["7"] = Enum.KeyCode.Seven,
+	["8"] = Enum.KeyCode.Eight,
+	["9"] = Enum.KeyCode.Nine
+}
+
 local UIHandler = {}
 
 local function insertHotbarItem(player: Player, item: {}, layoutOrder: number)
@@ -26,11 +38,11 @@ local function insertHotbarItem(player: Player, item: {}, layoutOrder: number)
 		newMove.LayoutOrder = layoutOrder or tonumber(item.Bind)
 		newMove.Parent = player:WaitForChild("PlayerGui"):WaitForChild("HUD").MovesetContainer.Hotbar
 		
-		local bind = Keybind.GetAction("Idle", item.MoveName)
-		bind.KeyboardBinding = Enum.KeyCode[item.Bind]
+		local bind = Keybind.GetAction("Idle", item.Name)
+		bind.KeyboardBinding.KeyCode = KeyCodeByBind[item.Bind]
 		
 		bind.Pressed:Connect(function()
-			print(item.MoveName)
+			print(item.Name)
 		end)
 	end
 end
