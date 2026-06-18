@@ -27,6 +27,29 @@ Ichigo.Moveset = {
 		Type = "BaseMove",
 		Name = "Shunpo",
 		Bind = "4"
+	},
+	["BAN-KAI!"] = {
+		Type = "Awakening",
+		Name = "BAN-KAI!",
+		Bind = "G"
+	}
+}
+
+Ichigo.UI = {
+	BarGradients = {
+		Awakening = {
+			Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 164, 8)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 191, 41)),
+			})
+		},
+
+		Special = {
+			Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 164, 8)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 191, 41)),
+			})
+		},
 	}
 }
 
