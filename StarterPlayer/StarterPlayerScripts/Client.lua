@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterPlayerScripts = game:GetService("StarterPlayer").StarterPlayerScripts
 
 local ClientModules = StarterPlayerScripts:WaitForChild("ClientModules")
+local PlayerStateClient = require(ClientModules:WaitForChild("PlayerStateClient"))
 local UIHandler = require(ClientModules:WaitForChild("UIHandler"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -11,6 +12,7 @@ local RequestCharacterEvent = Remotes:WaitForChild("RequestCharacter")
 
 local player = game.Players.LocalPlayer
 
+PlayerStateClient.Start()
 UIHandler.constructCharacterList()
 
 SwitchEvent.OnClientEvent:Connect(function(characterData)
