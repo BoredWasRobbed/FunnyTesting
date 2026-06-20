@@ -26,10 +26,18 @@ local DEFAULTS = {
 	DebugColor = Color3.fromRGB(255, 60, 60),
 	DebugTransparency = 0.75,
 	ReportToServer = false,
+	ReportStartToServer = false,
 	RemoteName = "HitboxReport",
+	ReflectionRemoteName = "ProjectileReflected",
+	ReflectionGracePeriod = 0.75,
+	Parry = nil,
+	Parryable = false,
 }
 
 local reportRemote = nil
+local reflectionRemote = nil
+local reflectionConnection = nil
+local activeProjectiles = {}
 
 local function mergeConfig(config)
 	local merged = {}
@@ -102,6 +110,17 @@ local function getHumanoid(model)
 	return model and model:FindFirstChildOfClass("Humanoid")
 end
 
+local function getRootPart(model)
+	if not model then
+		return nil
+	end
+
+	return model:FindFirstChild("HumanoidRootPart")
+		or model.PrimaryPart
+		or model:FindFirstChild("Torso")
+		or model:FindFirstChild("UpperTorso")
+end
+
 local function getTargetPlayer(model)
 	return model and Players:GetPlayerFromCharacter(model)
 end
@@ -159,7 +178,7 @@ local function isSameTeam(owner, targetModel)
 		return false
 	end
 
-	if not owner:IsA("Player") then
+	if typeof(owner) ~= "Instance" or not owner:IsA("Player") then
 		return false
 	end
 
@@ -181,6 +200,42 @@ local function getReportRemote(remoteName)
 	return reportRemote
 end
 
+local function getReflectionRemote(remoteName)
+	if reflectionRemote then
+		return reflectionRemote
+	end
+
+	if not RunService:IsClient() then
+		return nil
+	end
+
+	local remotes = ReplicatedStorage:WaitForChild("Remotes")
+	reflectionRemote = remotes:WaitForChild(remoteName or "ProjectileReflected")
+	return reflectionRemote
+end
+
+local function ensureReflectionListener(remoteName)
+	if reflectionConnection or not RunService:IsClient() then
+		return
+	end
+
+	local remote = getReflectionRemote(remoteName)
+	if not remote then
+		return
+	end
+
+	reflectionConnection = remote.OnClientEvent:Connect(function(payload)
+		if typeof(payload) ~= "table" or type(payload.ProjectileId) ~= "string" then
+			return
+		end
+
+		local hitbox = activeProjectiles[payload.ProjectileId]
+		if hitbox then
+			hitbox:Reflect(payload)
+		end
+	end)
+end
+
 function HitboxSystem.new(config)
 	local self = setmetatable({}, HitboxSystem)
 
@@ -195,6 +250,10 @@ function HitboxSystem.new(config)
 	self.Connection = nil
 	self.TraveledDistance = 0
 	self.CastId = self.Config.CastId or HttpService:GenerateGUID(false)
+	self.ProjectileId = self.Config.ProjectileId or (self.Config.Projectile and HttpService:GenerateGUID(false)) or nil
+	self.Reflected = false
+	self.ReflectedOwner = nil
+	self.OriginalOwner = self.Config.Owner
 
 	if self.Config.Projectile then
 		local projectile = self.Config.Projectile
@@ -203,6 +262,16 @@ function HitboxSystem.new(config)
 
 		self.CurrentCFrame = self.Config.CFrame or CFrame.new()
 		self.ProjectileVelocity = projectile.Velocity or direction.Unit * speed
+
+		if projectile.Part then
+			local owner = self.Config.Owner
+			local ownerUserId = typeof(owner) == "Instance" and owner:IsA("Player") and owner.UserId or nil
+
+			projectile.Part:SetAttribute("ProjectileId", self.ProjectileId)
+			projectile.Part:SetAttribute("ProjectileOwnerUserId", ownerUserId)
+			projectile.Part:SetAttribute("ParryableProjectile", self.Config.Parryable == true or projectile.Parryable == true)
+			projectile.Part:SetAttribute("ProjectileSkill", self.Config.SkillName or self.Config.Skill or self.Config.MoveId)
+		end
 	end
 
 	return self
@@ -369,16 +438,165 @@ function HitboxSystem:ReportHit(result)
 		return
 	end
 
+	local reflectedOwnerUserId = typeof(self.ReflectedOwner) == "Instance" and self.ReflectedOwner:IsA("Player") and self.ReflectedOwner.UserId or nil
+	local originalOwnerUserId = typeof(self.OriginalOwner) == "Instance" and self.OriginalOwner:IsA("Player") and self.OriginalOwner.UserId or nil
+
 	remote:FireServer({
+		Kind = "Hit",
 		Skill = skillName,
 		MoveId = self.Config.MoveId or skillName,
 		CastId = self.CastId,
-		Target = result.Model,
+		Target = result.Model or result.Target,
 		Part = result.Part,
 		HitPosition = result.Part and result.Part.Position,
 		HitboxCFrame = result.CFrame,
 		ClientTime = os.clock(),
+		Parryable = self.Config.Parryable == true,
+		IsProjectile = self.Config.Projectile ~= nil,
+		ProjectileId = self.ProjectileId,
+		ProjectileSkill = skillName,
+		ProjectilePart = self.Config.Projectile and self.Config.Projectile.Part or nil,
+		Reflected = self.Reflected == true,
+		ReflectedOwnerUserId = reflectedOwnerUserId,
+		OriginalOwnerUserId = originalOwnerUserId,
 	})
+end
+
+function HitboxSystem:ReportStart()
+	local remote = getReportRemote(self.Config.RemoteName)
+	if not remote then
+		return
+	end
+
+	local skillName = self.Config.SkillName or self.Config.Skill or self.Config.MoveId
+	if not skillName then
+		warn("Hitbox start report skipped because SkillName/Skill/MoveId is missing.")
+		return
+	end
+
+	remote:FireServer({
+		Kind = "Start",
+		Skill = skillName,
+		MoveId = self.Config.MoveId or skillName,
+		CastId = self.CastId,
+		HitboxCFrame = self:GetCFrame(),
+		ClientTime = os.clock(),
+		Parry = self.Config.Parry,
+		Parryable = self.Config.Parryable == true,
+		IsProjectile = self.Config.Projectile ~= nil,
+		ProjectileId = self.ProjectileId,
+		ProjectilePart = self.Config.Projectile and self.Config.Projectile.Part or nil,
+	})
+end
+
+function HitboxSystem:RefreshOverlapParams()
+	self.OverlapParams = createOverlapParams(self.Config)
+	return self
+end
+
+function HitboxSystem:SetIgnoreList(ignore)
+	self.Config.Ignore = ignore or {}
+	self.Config.FilterDescendantsInstances = self.Config.Ignore
+	return self:RefreshOverlapParams()
+end
+
+function HitboxSystem:ConnectHeartbeat()
+	if self.Connection then
+		return
+	end
+
+	self.Connection = RunService.Heartbeat:Connect(function(dt)
+		self:Step(dt)
+	end)
+end
+
+function HitboxSystem:Reflect(reflection)
+	local projectile = self.Config.Projectile
+	if not projectile then
+		return
+	end
+
+	self.Reflected = true
+	self.ReflectedOwner = reflection.ParryPlayer
+
+	if reflection.ParryPlayer then
+		self.Config.Owner = reflection.ParryPlayer
+	end
+
+	if projectile.RefreshIgnoreOnReflect ~= false then
+		local ignore = {}
+		local parryCharacter = getOwnerCharacter(reflection.ParryPlayer)
+
+		if parryCharacter then
+			table.insert(ignore, parryCharacter)
+		end
+
+		for _, instance in ipairs(asArray(projectile.ReflectIgnore)) do
+			table.insert(ignore, instance)
+		end
+
+		self:SetIgnoreList(ignore)
+	end
+
+	local customVelocity
+	if projectile.OnReflect then
+		customVelocity = projectile.OnReflect(self, reflection)
+	end
+
+	if customVelocity == nil and self.Config.OnReflect then
+		customVelocity = self.Config.OnReflect(self, reflection)
+	end
+
+	if customVelocity == false then
+		return
+	end
+
+	if typeof(customVelocity) == "Vector3" then
+		self.ProjectileVelocity = customVelocity
+	else
+		local originalRoot = getRootPart(getOwnerCharacter(reflection.OriginalAttacker))
+		local speed = projectile.ReflectionSpeed or projectile.Speed or self.ProjectileVelocity.Magnitude
+		speed *= projectile.ReflectionSpeedMultiplier or 1
+
+		if originalRoot then
+			local direction = originalRoot.Position - self.CurrentCFrame.Position
+			if direction.Magnitude > 0 then
+				self.ProjectileVelocity = direction.Unit * speed
+			else
+				self.ProjectileVelocity = -self.ProjectileVelocity
+			end
+		else
+			self.ProjectileVelocity = -self.ProjectileVelocity
+		end
+	end
+
+	if projectile.Part then
+		local reflectedOwnerUserId = reflection.ParryPlayer and reflection.ParryPlayer.UserId or nil
+
+		projectile.Part:SetAttribute("Reflected", true)
+		projectile.Part:SetAttribute("ProjectileOwnerUserId", reflectedOwnerUserId)
+		projectile.Part:SetAttribute("ReflectedFromUserId", reflection.OriginalAttacker and reflection.OriginalAttacker.UserId)
+	end
+
+	table.clear(self.HitTimes)
+	self.Elapsed = 0
+	self.Accumulator = self.Config.TickRate
+	self.TraveledDistance = 0
+	self.Active = true
+
+	if self.ProjectileId then
+		activeProjectiles[self.ProjectileId] = self
+	end
+
+	self:ConnectHeartbeat()
+
+	if projectile.OnReflected then
+		projectile.OnReflected(self, reflection)
+	end
+
+	if self.Config.OnReflected then
+		self.Config.OnReflected(self, reflection)
+	end
 end
 
 function HitboxSystem:Scan()
@@ -429,6 +647,10 @@ function HitboxSystem:StepProjectile(dt)
 		self.CurrentCFrame = CFrame.lookAt(nextPosition, nextPosition + self.ProjectileVelocity.Unit)
 	else
 		self.CurrentCFrame = CFrame.new(nextPosition) * (self.CurrentCFrame - self.CurrentCFrame.Position)
+	end
+
+	if projectile.Part then
+		projectile.Part.CFrame = self.CurrentCFrame
 	end
 
 	if projectile.OnStep then
@@ -514,9 +736,16 @@ function HitboxSystem:Start()
 		self.Config.OnStart(self)
 	end
 
-	self.Connection = RunService.Heartbeat:Connect(function(dt)
-		self:Step(dt)
-	end)
+	if self.Config.ReportToServer and (self.Config.ReportStartToServer or self.Config.Parry) then
+		self:ReportStart()
+	end
+
+	if self.Config.Projectile and self.ProjectileId then
+		activeProjectiles[self.ProjectileId] = self
+		ensureReflectionListener(self.Config.ReflectionRemoteName)
+	end
+
+	self:ConnectHeartbeat()
 
 	return self
 end
@@ -541,10 +770,31 @@ function HitboxSystem:Stop()
 	if self.Config.OnEnded then
 		self.Config.OnEnded(self)
 	end
+
+	if self.Config.Projectile and self.ProjectileId then
+		local projectileId = self.ProjectileId
+		local gracePeriod = self.Config.ReflectionGracePeriod
+
+		if gracePeriod <= 0 then
+			if activeProjectiles[projectileId] == self then
+				activeProjectiles[projectileId] = nil
+			end
+		else
+			task.delay(gracePeriod, function()
+				if activeProjectiles[projectileId] == self and not self.Active then
+					activeProjectiles[projectileId] = nil
+				end
+			end)
+		end
+	end
 end
 
 function HitboxSystem:Destroy()
 	self:Stop()
+	if self.ProjectileId and activeProjectiles[self.ProjectileId] == self then
+		activeProjectiles[self.ProjectileId] = nil
+	end
+
 	table.clear(self.HitTimes)
 end
 
