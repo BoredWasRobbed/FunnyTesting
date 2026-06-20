@@ -8,6 +8,7 @@ local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local SwitchEvent = Remotes:WaitForChild("SwitchCharacter")
 
 local CharacterRegistry = require(ReplicatedStorage:WaitForChild("GlobalModules"):WaitForChild("CharacterRegistry"))
+local PlayerStateService = require(script.Parent:WaitForChild("PlayerStateService"))
 
 local DEFAULT_CHARACTER = "Ichigo"
 local DATA_CHARACTER_KEY = "Character"
@@ -254,6 +255,11 @@ function CharacterService:switchCharacter(player: Player, characterName: string)
 	end
 
 	if not self:canUseCharacter(player, characterName) then
+		return
+	end
+
+	local canSwitch = PlayerStateService:Can(player, "CharacterSwitch")
+	if not canSwitch then
 		return
 	end
 
