@@ -23,6 +23,7 @@ function ParryCounter.Play(player: Player, context)
 		MoveId = context.Move.Skill or context.Move.Name,
 		ReportToServer = true,
 		ReportStartToServer = true,
+		StateDuration = 0.35,
 		AttachTo = root,
 		Offset = CFrame.new(0, 0, -3),
 		Shape = "Box",
@@ -35,7 +36,7 @@ function ParryCounter.Play(player: Player, context)
 		Debug = true,
 		DebugColor = Color3.fromRGB(255, 255, 255),
 
-		Parry = {
+		MoveParry = {
 			Enabled = true,
 			ReflectProjectiles = true,
 		},
