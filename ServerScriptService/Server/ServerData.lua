@@ -3,7 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataService = require(ReplicatedStorage.DataService).server
 
 local DataTemplate = {
-	LastCharacter = "Ichigo",
+	Character = "Ichigo",
 }
 
 DataService:init({
