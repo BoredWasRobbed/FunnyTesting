@@ -231,6 +231,13 @@ end
 
 function SkillSystem:Play(player: Player, move, inputState)
 	local result = self:ResolveMove(player, move, inputState)
+
+	if player:GetAttribute("State_CanSkill") == false then
+		result.BlockedByState = true
+		result.BlockedReason = player:GetAttribute("State_Primary") or "StateLocked"
+		return result
+	end
+
 	local skillModule = self:GetSkillModule(result.SkillName)
 
 	if not skillModule then
