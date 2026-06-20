@@ -43,6 +43,18 @@ local validator = ServerHitboxValidator.new({
 	DefaultCastWindow = 1.25,
 	DefaultMaxTargetsPerCast = 12,
 
+	OnParried = function(result)
+		print(`{result.ParryPlayer.Name} parried {result.OriginalAttacker.Name}'s {result.Skill}`)
+	end,
+
+	OnParriedProjectile = function(result)
+		print(`{result.ParryPlayer.Name} parried a projectile from {result.OriginalAttacker.Name}`)
+	end,
+
+	OnProjectileReflected = function(result)
+		print(`{result.ParryPlayer.Name} reflected {result.OriginalAttacker.Name}'s projectile`)
+	end,
+
 	CanUseSkill = function(player, skillName)
 		return characterHasSkill(player, skillName)
 	end,
@@ -59,6 +71,7 @@ local validator = ServerHitboxValidator.new({
 			IgnoreSameTeam = true,
 			RequireLineOfSight = false,
 			MinFacingDot = -0.15,
+			Parryable = true,
 
 			OnValidatedHit = function(result)
 				result.TargetHumanoid:TakeDamage(12)
@@ -75,10 +88,29 @@ local validator = ServerHitboxValidator.new({
 			HitInterval = 0.2,
 			IgnoreSameTeam = true,
 			RequireLineOfSight = false,
+			Parryable = true,
 
 			OnValidatedHit = function(result)
 				result.TargetHumanoid:TakeDamage(14)
 			end,
+		},
+
+		ParryCounter = {
+			Shape = "Box",
+			Size = Vector3.new(8, 6, 8),
+			Offset = CFrame.new(0, 0, -3),
+			MaxDistance = 12,
+			Cooldown = 1.4,
+			CastWindow = 0.5,
+			ServerRecast = false,
+			IgnoreSameTeam = true,
+
+			Parry = {
+				Enabled = true,
+				Window = 0.35,
+				ReflectProjectiles = true,
+				ProjectileParryDistance = 14,
+			},
 		},
 
 		ExampleProjectile = {
@@ -92,6 +124,8 @@ local validator = ServerHitboxValidator.new({
 			IgnoreSameTeam = true,
 			RequireLineOfSight = true,
 			ServerRecast = false,
+			Parryable = true,
+			ReflectedProjectileLifetime = 4,
 
 			OnValidatedHit = function(result)
 				result.TargetHumanoid:TakeDamage(10)
