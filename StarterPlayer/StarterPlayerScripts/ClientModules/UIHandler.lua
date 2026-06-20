@@ -465,6 +465,10 @@ local function bindMoveInput(player: Player, entry)
 		local result = SkillSystem:Play(player, entry.Move, inputState)
 		setMoveDisplay(entry, result, false)
 
+		if result.BlockedByState then
+			return
+		end
+
 		startCooldown(entry, getResultCooldown(result))
 	end)
 end
@@ -543,7 +547,7 @@ function UIHandler.constructCharacterList()
 	for characterName, _ in pairs(CharacterRegistry:getCharacters()) do
 		local newIcon = Icon.new()
 		newIcon:setLabel(characterName)
-		newIcon:bindEvent("selected", function()
+		newIcon:bindEvent("toggled", function()
 			SwitchEvent:FireServer(characterName)
 		end)
 
