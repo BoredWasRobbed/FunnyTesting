@@ -36,6 +36,8 @@ function ExampleProjectileSkill.Play(player: Player, context)
 		SkillName = context.SkillName,
 		MoveId = context.Move.Skill or context.Move.Name,
 		ReportToServer = true,
+		ReportStartToServer = true,
+		StateDuration = 0.35,
 		Parryable = true,
 		CFrame = projectilePart.CFrame,
 		Shape = "Sphere",
