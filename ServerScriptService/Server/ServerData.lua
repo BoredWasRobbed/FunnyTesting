@@ -4,6 +4,9 @@ local DataService = require(ReplicatedStorage.DataService).server
 
 local DataTemplate = {
 	Character = "Ichigo",
+	Money = 0,
+	Emotes = {},
+	Achievements = {},
 }
 
 DataService:init({
