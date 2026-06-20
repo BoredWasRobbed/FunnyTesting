@@ -83,6 +83,42 @@ local function getRootPart(model)
 		or model:FindFirstChild("UpperTorso")
 end
 
+local function getSubjectFromCharacter(character)
+	return Players:GetPlayerFromCharacter(character) or character
+end
+
+local function getSubjectCharacter(subject)
+	if typeof(subject) ~= "Instance" then
+		return nil
+	end
+
+	if subject:IsA("Player") then
+		return subject.Character
+	end
+
+	if subject:IsA("Model") then
+		return subject
+	end
+
+	return nil
+end
+
+local function getSubjectUserId(subject)
+	if typeof(subject) == "Instance" and subject:IsA("Player") then
+		return subject.UserId
+	end
+
+	return nil
+end
+
+local function getSubjectName(subject)
+	if typeof(subject) == "Instance" then
+		return subject.Name
+	end
+
+	return "Unknown"
+end
+
 local function getModelFromPayloadTarget(target)
 	if typeof(target) ~= "Instance" then
 		return nil
@@ -137,12 +173,41 @@ local function getProjectileOwner(part)
 		return nil
 	end
 
+	local ownerValue = part:FindFirstChild("ProjectileOwner")
+	if ownerValue and ownerValue:IsA("ObjectValue") and ownerValue.Value then
+		return ownerValue.Value
+	end
+
 	local ownerUserId = part:GetAttribute("ProjectileOwnerUserId")
 	if typeof(ownerUserId) == "number" then
 		return Players:GetPlayerByUserId(ownerUserId)
 	end
 
 	return nil
+end
+
+local function setProjectileOwner(part, subject)
+	if not part then
+		return
+	end
+
+	part:SetAttribute("ProjectileOwnerUserId", getSubjectUserId(subject))
+	part:SetAttribute("ProjectileOwnerName", getSubjectName(subject))
+
+	if typeof(subject) ~= "Instance" then
+		return
+	end
+
+	local ownerValue = part:FindFirstChild("ProjectileOwner")
+	if not ownerValue then
+		ownerValue = Instance.new("ObjectValue")
+		ownerValue.Name = "ProjectileOwner"
+		ownerValue.Parent = part
+	end
+
+	if ownerValue:IsA("ObjectValue") then
+		ownerValue.Value = subject
+	end
 end
 
 local function getReportedPart(payload, targetModel)
@@ -289,7 +354,7 @@ end
 
 function ServerHitboxValidator:Reject(player, reason, payload, skillConfig)
 	if self.Config.Debug or (skillConfig and skillConfig.Debug) then
-		warn(`Rejected hitbox report from {player.Name}: {reason}`)
+		warn(`Rejected hitbox report from {getSubjectName(player)}: {reason}`)
 	end
 
 	if self.Config.OnRejected then
@@ -299,22 +364,35 @@ function ServerHitboxValidator:Reject(player, reason, payload, skillConfig)
 	return false, reason
 end
 
+function ServerHitboxValidator:GetMoveParryConfig(skillConfig)
+	if typeof(skillConfig.MoveParry) == "table" then
+		return skillConfig.MoveParry
+	end
+
+	if typeof(skillConfig.Parry) == "table" then
+		return skillConfig.Parry
+	end
+
+	return nil
+end
+
 function ServerHitboxValidator:IsParrySkill(skillConfig)
-	return typeof(skillConfig.Parry) == "table" and skillConfig.Parry.Enabled == true
+	local parryConfig = self:GetMoveParryConfig(skillConfig)
+	return parryConfig and parryConfig.Enabled == true
 end
 
 function ServerHitboxValidator:IsAttackParryable(skillConfig, payload)
 	return skillConfig.Parryable == true or (payload and payload.Parryable == true)
 end
 
-function ServerHitboxValidator:GetActiveParry(player)
-	local parry = self.ActiveParries[player]
+function ServerHitboxValidator:GetActiveParry(subject)
+	local parry = self.ActiveParries[subject]
 	if not parry then
 		return nil
 	end
 
 	if os.clock() > parry.ExpiresAt then
-		self.ActiveParries[player] = nil
+		self.ActiveParries[subject] = nil
 		return nil
 	end
 
@@ -341,27 +419,40 @@ function ServerHitboxValidator:CheckStartCooldown(player, skillName, skillConfig
 	return true
 end
 
-function ServerHitboxValidator:RegisterParryWindow(player, skillName, skillConfig, payload)
-	local parryConfig = skillConfig.Parry
+function ServerHitboxValidator:RegisterParryWindow(subject, skillName, skillConfig, payload)
+	local parryConfig = self:GetMoveParryConfig(skillConfig)
 	local now = os.clock()
 	local window = parryConfig.Window or self.Config.DefaultParryWindow
+	local character = getSubjectCharacter(subject)
+	local player = typeof(subject) == "Instance" and subject:IsA("Player") and subject or Players:GetPlayerFromCharacter(character)
 
-	self.ActiveParries[player] = {
+	self.ActiveParries[subject] = {
+		Subject = subject,
 		Player = player,
+		Character = character,
 		Skill = skillName,
 		Config = skillConfig,
 		Parry = parryConfig,
-		CastId = payload.CastId,
+		CastId = payload and payload.CastId,
 		StartedAt = now,
 		ExpiresAt = now + window,
 		ReflectProjectiles = parryConfig.ReflectProjectiles == true,
 	}
 
 	if parryConfig.OnParryStarted then
-		parryConfig.OnParryStarted(self.ActiveParries[player])
+		parryConfig.OnParryStarted(self.ActiveParries[subject])
 	end
 
-	return self.ActiveParries[player]
+	return self.ActiveParries[subject]
+end
+
+function ServerHitboxValidator:RegisterMoveParry(subject, skillName, skillConfig, payload)
+	skillConfig = skillConfig or self.Skills[skillName]
+	if not skillConfig or not self:IsParrySkill(skillConfig) then
+		return nil
+	end
+
+	return self:RegisterParryWindow(subject, skillName, skillConfig, payload or {})
 end
 
 function ServerHitboxValidator:ValidateStart(player, payload)
@@ -398,6 +489,10 @@ function ServerHitboxValidator:ValidateStart(player, payload)
 		return self:Reject(player, "bad_attacker", payload, skillConfig)
 	end
 
+	if type(payload.CastId) ~= "string" or #payload.CastId <= 0 or #payload.CastId > 80 then
+		return self:Reject(player, "bad_cast_id", payload, skillConfig)
+	end
+
 	if not self:IsParrySkill(skillConfig) then
 		return true, {
 			Kind = "Start",
@@ -409,10 +504,6 @@ function ServerHitboxValidator:ValidateStart(player, payload)
 			AttackerRoot = root,
 			Payload = payload,
 		}
-	end
-
-	if type(payload.CastId) ~= "string" or #payload.CastId <= 0 or #payload.CastId > 80 then
-		return self:Reject(player, "bad_cast_id", payload, skillConfig)
 	end
 
 	local parry = self:GetActiveParry(player)
@@ -451,6 +542,7 @@ function ServerHitboxValidator:BroadcastReflection(result)
 		ProjectileId = result.ProjectileId,
 		ProjectilePart = result.ProjectilePart,
 		OriginalAttacker = result.OriginalAttacker,
+		ParrySubject = result.ParrySubject,
 		ParryPlayer = result.ParryPlayer,
 		IncomingSkill = result.IncomingSkill or result.Skill,
 		ParrySkill = result.Parry and result.Parry.Skill,
@@ -461,7 +553,7 @@ function ServerHitboxValidator:ReflectProjectile(result)
 	if result.ProjectileId then
 		local lifetime = result.Config.ReflectedProjectileLifetime or self.Config.DefaultReflectedProjectileLifetime
 		self.ReflectedProjectiles[result.ProjectileId] = {
-			Owner = result.ParryPlayer,
+			Owner = result.ParrySubject or result.ParryPlayer,
 			OriginalAttacker = result.OriginalAttacker,
 			Skill = result.IncomingSkill or result.Skill,
 			ExpiresAt = os.clock() + lifetime,
@@ -471,8 +563,9 @@ function ServerHitboxValidator:ReflectProjectile(result)
 	local projectilePart = result.ProjectilePart
 	if projectilePart and projectilePart.Parent then
 		projectilePart:SetAttribute("Reflected", true)
-		projectilePart:SetAttribute("ProjectileOwnerUserId", result.ParryPlayer.UserId)
-		projectilePart:SetAttribute("ReflectedFromUserId", result.OriginalAttacker and result.OriginalAttacker.UserId)
+		projectilePart:SetAttribute("ReflectedFromUserId", getSubjectUserId(result.OriginalAttacker))
+		projectilePart:SetAttribute("ReflectedFromName", getSubjectName(result.OriginalAttacker))
+		setProjectileOwner(projectilePart, result.ParrySubject or result.ParryPlayer)
 	end
 
 	if result.Parry and result.Parry.Parry and result.Parry.Parry.OnProjectileReflected then
@@ -518,19 +611,21 @@ function ServerHitboxValidator:ResolveParry(result)
 		return false
 	end
 
-	local targetPlayer = Players:GetPlayerFromCharacter(result.TargetModel)
-	if not targetPlayer then
+	local targetSubject = getSubjectFromCharacter(result.TargetModel)
+	if not targetSubject then
 		return false
 	end
 
-	local parry = self:GetActiveParry(targetPlayer)
+	local parry = self:GetActiveParry(targetSubject)
 	if not parry then
 		return false
 	end
 
 	result.Parried = true
 	result.Parry = parry
-	result.ParryPlayer = targetPlayer
+	result.ParrySubject = targetSubject
+	result.ParryPlayer = typeof(targetSubject) == "Instance" and targetSubject:IsA("Player") and targetSubject or nil
+	result.ParryCharacter = result.TargetModel
 	result.OriginalAttacker = result.Attacker
 	result.IsProjectile = result.Payload.IsProjectile == true or result.Config.Projectile == true
 	result.ProjectilePart = getPayloadPart(result.Payload)
@@ -591,7 +686,8 @@ function ServerHitboxValidator:ValidateDirectProjectileParry(player, payload)
 		return self:Reject(player, "self_projectile_parry", payload, skillConfig)
 	end
 
-	local reach = skillConfig.Parry.ProjectileParryDistance or skillConfig.MaxDistance or getReach(skillConfig, self.Config)
+	local parryConfig = self:GetMoveParryConfig(skillConfig)
+	local reach = parryConfig.ProjectileParryDistance or skillConfig.MaxDistance or getReach(skillConfig, self.Config)
 	if (root.Position - projectilePart.Position).Magnitude > reach then
 		return self:Reject(player, "projectile_too_far", payload, skillConfig)
 	end
@@ -615,6 +711,7 @@ function ServerHitboxValidator:ValidateDirectProjectileParry(player, payload)
 		AttackerHumanoid = humanoid,
 		AttackerRoot = root,
 		Parry = parry,
+		ParrySubject = player,
 		ParryPlayer = player,
 		OriginalAttacker = originalAttacker,
 		ProjectilePart = projectilePart,
@@ -841,7 +938,7 @@ function ServerHitboxValidator:Validate(player, payload)
 		return self:Reject(player, "bad_reflected_owner", payload, skillConfig)
 	end
 
-	local attackerCharacter = attacker.Character
+	local attackerCharacter = getSubjectCharacter(attacker)
 	local attackerHumanoid = getHumanoid(attackerCharacter)
 	local attackerRoot = getRootPart(attackerCharacter)
 
@@ -859,7 +956,7 @@ function ServerHitboxValidator:Validate(player, payload)
 	end
 
 	if reflectedProjectile and skillConfig.ReflectedCanHitAnyTarget ~= true then
-		local originalCharacter = reflectedProjectile.OriginalAttacker and reflectedProjectile.OriginalAttacker.Character
+		local originalCharacter = getSubjectCharacter(reflectedProjectile.OriginalAttacker)
 		if not originalCharacter or targetModel ~= originalCharacter then
 			return self:Reject(player, "reflected_wrong_target", payload, skillConfig)
 		end
