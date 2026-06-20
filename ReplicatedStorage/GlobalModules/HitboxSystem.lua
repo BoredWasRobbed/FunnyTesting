@@ -30,6 +30,7 @@ local DEFAULTS = {
 	RemoteName = "HitboxReport",
 	ReflectionRemoteName = "ProjectileReflected",
 	ReflectionGracePeriod = 0.75,
+	MoveParry = nil,
 	Parry = nil,
 	Parryable = false,
 }
@@ -95,6 +96,46 @@ local function getOwnerCharacter(owner)
 	end
 
 	return nil
+end
+
+local function getOwnerUserId(owner)
+	if typeof(owner) == "Instance" and owner:IsA("Player") then
+		return owner.UserId
+	end
+
+	return nil
+end
+
+local function getOwnerName(owner)
+	if typeof(owner) == "Instance" then
+		return owner.Name
+	end
+
+	return nil
+end
+
+local function syncProjectileOwner(part, owner)
+	if not part then
+		return
+	end
+
+	part:SetAttribute("ProjectileOwnerUserId", getOwnerUserId(owner))
+	part:SetAttribute("ProjectileOwnerName", getOwnerName(owner))
+
+	if typeof(owner) ~= "Instance" then
+		return
+	end
+
+	local ownerValue = part:FindFirstChild("ProjectileOwner")
+	if not ownerValue then
+		ownerValue = Instance.new("ObjectValue")
+		ownerValue.Name = "ProjectileOwner"
+		ownerValue.Parent = part
+	end
+
+	if ownerValue:IsA("ObjectValue") then
+		ownerValue.Value = owner
+	end
 end
 
 local function getModelFromPart(part)
@@ -264,13 +305,10 @@ function HitboxSystem.new(config)
 		self.ProjectileVelocity = projectile.Velocity or direction.Unit * speed
 
 		if projectile.Part then
-			local owner = self.Config.Owner
-			local ownerUserId = typeof(owner) == "Instance" and owner:IsA("Player") and owner.UserId or nil
-
 			projectile.Part:SetAttribute("ProjectileId", self.ProjectileId)
-			projectile.Part:SetAttribute("ProjectileOwnerUserId", ownerUserId)
 			projectile.Part:SetAttribute("ParryableProjectile", self.Config.Parryable == true or projectile.Parryable == true)
 			projectile.Part:SetAttribute("ProjectileSkill", self.Config.SkillName or self.Config.Skill or self.Config.MoveId)
+			syncProjectileOwner(projectile.Part, self.Config.Owner)
 		end
 	end
 
@@ -481,6 +519,9 @@ function HitboxSystem:ReportStart()
 		CastId = self.CastId,
 		HitboxCFrame = self:GetCFrame(),
 		ClientTime = os.clock(),
+		ActionState = self.Config.ActionState,
+		StateDuration = self.Config.StateDuration or self.Config.Duration,
+		MoveParry = self.Config.MoveParry,
 		Parry = self.Config.Parry,
 		Parryable = self.Config.Parryable == true,
 		IsProjectile = self.Config.Projectile ~= nil,
@@ -517,15 +558,16 @@ function HitboxSystem:Reflect(reflection)
 	end
 
 	self.Reflected = true
-	self.ReflectedOwner = reflection.ParryPlayer
+	local reflectedOwner = reflection.ParrySubject or reflection.ParryPlayer
+	self.ReflectedOwner = reflectedOwner
 
-	if reflection.ParryPlayer then
-		self.Config.Owner = reflection.ParryPlayer
+	if reflectedOwner then
+		self.Config.Owner = reflectedOwner
 	end
 
 	if projectile.RefreshIgnoreOnReflect ~= false then
 		local ignore = {}
-		local parryCharacter = getOwnerCharacter(reflection.ParryPlayer)
+		local parryCharacter = getOwnerCharacter(reflectedOwner)
 
 		if parryCharacter then
 			table.insert(ignore, parryCharacter)
@@ -571,11 +613,10 @@ function HitboxSystem:Reflect(reflection)
 	end
 
 	if projectile.Part then
-		local reflectedOwnerUserId = reflection.ParryPlayer and reflection.ParryPlayer.UserId or nil
-
 		projectile.Part:SetAttribute("Reflected", true)
-		projectile.Part:SetAttribute("ProjectileOwnerUserId", reflectedOwnerUserId)
-		projectile.Part:SetAttribute("ReflectedFromUserId", reflection.OriginalAttacker and reflection.OriginalAttacker.UserId)
+		projectile.Part:SetAttribute("ReflectedFromUserId", getOwnerUserId(reflection.OriginalAttacker))
+		projectile.Part:SetAttribute("ReflectedFromName", getOwnerName(reflection.OriginalAttacker))
+		syncProjectileOwner(projectile.Part, reflectedOwner)
 	end
 
 	table.clear(self.HitTimes)
@@ -736,7 +777,7 @@ function HitboxSystem:Start()
 		self.Config.OnStart(self)
 	end
 
-	if self.Config.ReportToServer and (self.Config.ReportStartToServer or self.Config.Parry) then
+	if self.Config.ReportToServer and (self.Config.ReportStartToServer or self.Config.MoveParry or self.Config.Parry) then
 		self:ReportStart()
 	end
 
