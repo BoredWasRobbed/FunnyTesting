@@ -4,34 +4,88 @@ local Ichigo = {}
 Ichigo.Moveset = {
 	["Vizard"] = {
 		Type = "Special",
+		Skill = "Vizard",
 		Name = "Vizard",
-		Bind = "R"
+		Bind = "R",
+		Cooldown = 8,
 	},
 	["GetsugaTensho"] = {
 		Type = "BaseMove",
+		Skill = "GetsugaTensho",
 		Name = "Getsuga Tensho",
 		Bind = "1",
-		Tooltip = "HOLD"
+		Tooltip = "VARIANTS",
+		Cooldown = 5,
+		Variants = {
+			{
+				Id = "Air",
+				Name = "Aerial Getsuga Tensho",
+				Skill = "GetsugaTenshoAir",
+				Priority = 100,
+				Cooldown = 6,
+				Conditions = {
+					Air = true,
+				},
+			},
+			{
+				Id = "Jump",
+				Name = "Rising Getsuga Tensho",
+				Skill = "GetsugaTenshoJump",
+				Priority = 80,
+				Cooldown = 5,
+				Conditions = {
+					Jump = true,
+				},
+			},
+			{
+				Id = "Block",
+				Name = "Guard Break Getsuga",
+				Skill = "GetsugaTenshoBlock",
+				Priority = 70,
+				Cooldown = 7,
+				Conditions = {
+					Block = true,
+				},
+			},
+			{
+				Id = "LowHP",
+				Name = "Desperate Getsuga Tensho",
+				Skill = "GetsugaTenshoLowHP",
+				Priority = 60,
+				Cooldown = 10,
+				Conditions = {
+					HPAtOrBelow = 0.35,
+				},
+			},
+		},
 	},
 	["VanishingJab"] = {
 		Type = "BaseMove",
+		Skill = "VanishingJab",
 		Name = "Vanishing Jab",
-		Bind = "2"
+		Bind = "2",
+		Cooldown = 4,
 	},
 	["Krash"] = {
 		Type = "BaseMove",
+		Skill = "ExampleProjectileSkill",
 		Name = "Krash",
-		Bind = "3"
+		Bind = "3",
+		Cooldown = 7,
 	},
 	["Shunpo"] = {
 		Type = "BaseMove",
+		Skill = "Shunpo",
 		Name = "Shunpo",
-		Bind = "4"
+		Bind = "4",
+		Cooldown = 3,
 	},
 	["BAN-KAI!"] = {
 		Type = "Awakening",
+		Skill = "Bankai",
 		Name = "BAN-KAI!",
-		Bind = "G"
+		Bind = "G",
+		Cooldown = 1,
 	}
 }
 
